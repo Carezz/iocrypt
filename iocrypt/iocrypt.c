@@ -113,8 +113,6 @@ cleanup:
 
 static uint32_t iocrypt_process(iocrypt_context* ctx, uint32_t type, uint32_t overwrite)
 {
-    if(ctx == NULL) return IOCRYPT_ERROR;
-
 	uint32_t err = 0;
 	uint8_t content_block[CONTENT_BLOCK_SIZE] = {0};
 	// needs error checking
