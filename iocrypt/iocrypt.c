@@ -52,13 +52,10 @@ cleanup:
 
 static uint32_t iocrypt_derive_keys(iocrypt_context* ctx, uint32_t type)
 {
-	if (ctx == NULL)
-		return IOCRYPT_ERROR;
-
 	uint32_t err = 0;
 	uint8_t* input = NULL, *output = NULL;
 
-	if (type && !iocrypt_gen_keys(ctx))
+	if (type == IOCRYPT_ENCRYPT && !iocrypt_gen_keys(ctx))
 	{
 		err = 1;
 		goto cleanup;
@@ -70,7 +67,7 @@ static uint32_t iocrypt_derive_keys(iocrypt_context* ctx, uint32_t type)
 		err = 1;
 		goto cleanup;
 	}
-
+	
 	if (mbedtls_hkdf(ctx->md_info, ctx->iocrypt_header + SALT_SIZE + HASH_SIZE, SALT_SIZE, ctx->passphrase, ctx->passphrase_len,
 		KDF_CUSTOM, sizeof(KDF_CUSTOM), ctx->keys.header_prekey, HEADER_BLOCK_SIZE) != 0)
 	{
@@ -78,7 +75,7 @@ static uint32_t iocrypt_derive_keys(iocrypt_context* ctx, uint32_t type)
 		goto cleanup;
 	}
 
-	if (type)
+	if (type == IOCRYPT_ENCRYPT)
 	{
 		input = ctx->keys.header_masterkey;
 		output = ctx->iocrypt_header + SALT_SIZE + HASH_SIZE + SALT_SIZE;
@@ -88,7 +85,7 @@ static uint32_t iocrypt_derive_keys(iocrypt_context* ctx, uint32_t type)
 		input = ctx->iocrypt_header + SALT_SIZE + HASH_SIZE + SALT_SIZE;
 		output = ctx->keys.header_masterkey;
 	}
-
+	
 	if (mbedtls_aes_setkey_enc(&ctx->cipher, ctx->keys.header_prekey, CIPHERKEY_BITS) != 0)
 	{
 		err = 1;
@@ -241,15 +238,15 @@ uint32_t iocrypt_crypt(iocrypt_context* ctx, uint32_t type, uint32_t overwrite, 
 	   goto cleanup;
 	}
 
-	ctx->f = fopen(TEST_OUTPUT_NAME, OUTPUT_FILE_MODE);
+	ctx->o = fopen(TEST_OUTPUT_NAME, OUTPUT_FILE_MODE);
 
-	if (ctx->f == NULL)
+	if (ctx->o == NULL)
 	{
 		err = 1;
 		goto cleanup;
 	}
 
-	if (!type && fread(ctx->iocrypt_header, 1, HEADER_SIZE, ctx->f) != HEADER_SIZE) // decrypting
+	if (type == IOCRYPT_DECRYPT && fread(ctx->iocrypt_header, 1, HEADER_SIZE, ctx->f) != HEADER_SIZE) // decrypting
 	{
 		err = 1;
 		goto cleanup;
@@ -268,8 +265,12 @@ uint32_t iocrypt_crypt(iocrypt_context* ctx, uint32_t type, uint32_t overwrite, 
 	}
 
 cleanup:
-    fclose(ctx->f);
-	fclose(ctx->o);
+	if (ctx->f)
+		fclose(ctx->f);
+
+	if (ctx->o)
+		fclose(ctx->o);
+
 	if(err) return IOCRYPT_ERROR;
 
 	return IOCRYPT_SUCCESS;

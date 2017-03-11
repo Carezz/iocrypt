@@ -66,7 +66,7 @@ typedef struct
 
   /* AES-CTR specific */
   uint8_t stream[16];
-  uint32_t offset;
+  size_t offset;
 }iocrypt_context;
 
 uint32_t iocrypt_init(iocrypt_context* ctx, uint8_t* passphrase, uint32_t passphrase_len);
