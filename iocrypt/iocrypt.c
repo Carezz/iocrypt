@@ -229,19 +229,32 @@ static uint32_t iocrypt_file_crypt(iocrypt_context* ctx, uint32_t buf_len)
 	uint32_t ret = IOCRYPT_SUCCESS;
 
 	if (fread(ctx->file.file_buf, 1, buf_len, ctx->file.in) != buf_len)
+	{ 
 		ret = IOCRYPT_ERROR;
+		goto cleanup;
+	}
 
 	if (mbedtls_aes_crypt_ctr(&ctx->cipher, buf_len, &ctx->offset, ctx->keys.master_key + IV_SIZE, ctx->stream,
 		ctx->file.file_buf, ctx->file.file_buf) != 0)
+	{
 		ret = IOCRYPT_ERROR;
+		goto cleanup;
+	}
 
 	if (mbedtls_md_hmac_update(&ctx->hash, ctx->file.file_buf, buf_len) != 0)
+	{
 		ret = IOCRYPT_ERROR;
+		goto cleanup;
+	}
 
 
 	if (fwrite(ctx->file.file_buf, 1, buf_len, ctx->file.out) != buf_len)
+	{
 		ret = IOCRYPT_ERROR;
+		goto cleanup;
+	}
 
+cleanup:
 	return ret;
 }
 
