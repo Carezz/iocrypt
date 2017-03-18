@@ -27,7 +27,7 @@
 #define HEADER_MASTER_SIZE CIPHERKEY_SIZE + IV_SIZE
 #define HEADER_SIZE SALT_SIZE + HASH_SIZE + SALT_SIZE + HEADER_MASTER_SIZE
 
-#define CONTENT_BLOCK_SIZE 4096
+#define FILE_BUF_SIZE 4096
 
 #define IOCRYPT_SUCCESS 1
 #define IOCRYPT_ERROR 0
@@ -39,7 +39,7 @@
 #define KDF_CUSTOM "iocrypt key-derivation function"
 
 #define INPUT_FILE_MODE "rb"
-#define OUTPUT_FILE_MODE "ab+"
+#define OUTPUT_FILE_MODE "wb"
 #define IOCRYPT_EXT ".enc"
 
 #pragma pack(1)
@@ -57,8 +57,12 @@ typedef struct
 {
   FILE* in;
   uint64_t in_len;
+  uint64_t file_blocks;
+  uint32_t final_block;
   FILE* out;
+
   uint8_t path_name[MAX_PATH];
+  uint8_t file_buf[FILE_BUF_SIZE];
   uint32_t type;
 }iocrypt_file_context;
 
