@@ -13,7 +13,7 @@ static void iocrypt_secure_erase(void* data, uint64_t len)
 static uint32_t iocrypt_timesafe_compare(uint8_t* input1, uint32_t len1, uint8_t* input2, uint32_t len2, uint32_t clen)
 {
 	uint32_t ret = IOCRYPT_SUCCESS;
-	uint32_t retult = 0;
+	uint32_t result = 0;
 
 	if (clen > len1 || clen > len2)
 	{
@@ -23,10 +23,10 @@ static uint32_t iocrypt_timesafe_compare(uint8_t* input1, uint32_t len1, uint8_t
 
 	for (uint32_t i = 0; i < clen; i++)
 	{
-		retult |= (input1[i] ^ input2[i]);
+		result |= (input1[i] ^ input2[i]);
 	}
 
-	if (retult != 0)
+	if (result != 0)
 	{
 		ret = IOCRYPT_ERROR;
 		goto cleanup;
@@ -78,7 +78,7 @@ cleanup:
 static uint32_t iocrypt_derive_keys(iocrypt_context* ctx)
 {
 	uint32_t ret = IOCRYPT_SUCCESS;
-	uint8_t* input = NULL, *output = NULL;
+	uint8_t* input = ctx->keys.master_key, *output = ctx->iocrypt_header + SALT_SIZE + HASH_SIZE + SALT_SIZE;
 
 	/* if we're encrypting , generate the needed keys */
 
@@ -106,15 +106,13 @@ static uint32_t iocrypt_derive_keys(iocrypt_context* ctx)
 
 	/* encrypt/decrypt the master subheader */
 
-	if (ctx->file.type == IOCRYPT_ENCRYPT)
+	if (ctx->file.type == IOCRYPT_DECRYPT)
 	{
-		input = ctx->keys.master_key;
-		output = ctx->iocrypt_header + SALT_SIZE + HASH_SIZE + SALT_SIZE;
-	}
-	else
-	{
-		input = ctx->iocrypt_header + SALT_SIZE + HASH_SIZE + SALT_SIZE;
-		output = ctx->keys.master_key;
+		/*input = ctx->iocrypt_header + SALT_SIZE + HASH_SIZE + SALT_SIZE;
+		output = ctx->keys.master_key;*/
+		uint8_t* tmp = input;
+		input = output;
+		output = tmp;
 	}
 
 	if (mbedtls_aes_setkey_enc(&ctx->cipher, ctx->keys.header_key, CIPHERKEY_BITS) != 0)
@@ -123,7 +121,7 @@ static uint32_t iocrypt_derive_keys(iocrypt_context* ctx)
 		goto cleanup;
 	}
 
-	if (mbedtls_aes_crypt_ctr(&ctx->cipher, HEADER_MASTER_SIZE, &ctx->offset, ctx->keys.header_key + CIPHERKEY_SIZE, ctx->stream, input, output) != 0)
+	if (mbedtls_aes_crypt_ctr(&ctx->cipher, HEADER_MASTER_SIZE, &ctx->offset, ctx->keys.header_iv, ctx->stream, input, output) != 0)
 	{
 		ret = IOCRYPT_ERROR;
 		goto cleanup;
@@ -180,8 +178,6 @@ static uint32_t iocrypt_file_init(iocrypt_file_context* file, uint8_t* path, uin
 		ret = IOCRYPT_ERROR;
 		goto cleanup;
 	}
-	// add check for decryption (remove .enc)
-	memcpy(file->path_name + path_len, IOCRYPT_EXT, strlen(IOCRYPT_EXT));
 
 	/* Obtain file length */
 
@@ -204,6 +200,9 @@ static uint32_t iocrypt_file_init(iocrypt_file_context* file, uint8_t* path, uin
 	file->file_blocks = file->in_len / FILE_BUF_SIZE;
 	file->final_block = file->in_len % FILE_BUF_SIZE;
 
+	// add check for decryption (remove .enc)
+	memcpy(file->path_name + path_len, IOCRYPT_EXT, strlen(IOCRYPT_EXT));
+
 	/* Create output file */
 
 	file->out = fopen(file->path_name, OUTPUT_FILE_MODE);
@@ -213,6 +212,8 @@ static uint32_t iocrypt_file_init(iocrypt_file_context* file, uint8_t* path, uin
 		ret = IOCRYPT_ERROR;
 		goto cleanup;
 	}
+
+	/* pad the header */
 
 	if (fwrite(NULL, 1, HEADER_SIZE, file->out) != HEADER_SIZE)
 	{
@@ -234,7 +235,7 @@ static uint32_t iocrypt_file_crypt(iocrypt_context* ctx, uint32_t buf_len)
 		goto cleanup;
 	}
 
-	if (mbedtls_aes_crypt_ctr(&ctx->cipher, buf_len, &ctx->offset, ctx->keys.master_key + IV_SIZE, ctx->stream,
+	if (mbedtls_aes_crypt_ctr(&ctx->cipher, buf_len, &ctx->offset, ctx->keys.master_iv, ctx->stream,
 		ctx->file.file_buf, ctx->file.file_buf) != 0)
 	{
 		ret = IOCRYPT_ERROR;
@@ -365,10 +366,10 @@ uint32_t iocrypt_crypt(iocrypt_context* ctx, uint32_t type, uint8_t* file_path, 
 		goto cleanup;
 	}
 
-	rewind(ctx->file.out);
-
 	if (ctx->file.type == IOCRYPT_ENCRYPT)
 	{ 
+	   rewind(ctx->file.out);
+
 	   if(fwrite(ctx->iocrypt_header, 1, HEADER_SIZE, ctx->file.out) != HEADER_SIZE)
 	   {
 		   ret = IOCRYPT_ERROR;
@@ -385,7 +386,7 @@ uint32_t iocrypt_crypt(iocrypt_context* ctx, uint32_t type, uint8_t* file_path, 
 	}
 
 cleanup:
-    if(!ret) remove(ctx->file.path_name); // unsure about this...
+    if(!ret) remove(ctx->file.path_name); 
 	hmac_ptr = NULL;
 	iocrypt_secure_erase(hmac, HASH_SIZE);
     iocrypt_file_free(&ctx->file);
