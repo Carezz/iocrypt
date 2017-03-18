@@ -108,8 +108,6 @@ static uint32_t iocrypt_derive_keys(iocrypt_context* ctx)
 
 	if (ctx->file.type == IOCRYPT_DECRYPT)
 	{
-		/*input = ctx->iocrypt_header + SALT_SIZE + HASH_SIZE + SALT_SIZE;
-		output = ctx->keys.master_key;*/
 		uint8_t* tmp = input;
 		input = output;
 		output = tmp;
@@ -397,8 +395,14 @@ uint32_t iocrypt_crypt(iocrypt_context* ctx, uint32_t type, uint8_t* file_path, 
 cleanup:
     if(!ret) remove(ctx->file.path_name); 
 	hmac_ptr = NULL;
+	ctx->offset = 0;
+	iocrypt_secure_erase(ctx->stream, sizeof(ctx->stream));
 	iocrypt_secure_erase(hmac, HASH_SIZE);
     iocrypt_file_free(&ctx->file);
+	iocrypt_secure_erase(&ctx->keys, sizeof(iocrypt_keys_context));
+	iocrypt_secure_erase(&ctx->iocrypt_header, HEADER_SIZE);
+	mbedtls_md_free(&ctx->hash);
+	mbedtls_aes_free(&ctx->cipher);
 	return ret;
 }
 
