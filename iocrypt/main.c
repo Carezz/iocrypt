@@ -6,7 +6,7 @@
 #define PATH "E:\\testfile.txt"
 #define PATH_DECRYPT "E:\\testfile.txt.enc"
 
-#define CIPHER_MODE 1 // 1 = encrypt , 0 = decrypt
+#define CIPHER_MODE 0 // 1 = encrypt , 0 = decrypt
 
 int main()
 {
@@ -25,7 +25,7 @@ int main()
 #endif
 
 	path_len = strlen(path);
-	r = iocrypt_crypt(&io, mode, PATH, strlen(PATH));
+	r = iocrypt_crypt(&io, mode, path, strlen(PATH_DECRYPT));
     getchar();
 	iocrypt_free(&io);
 	return 0;

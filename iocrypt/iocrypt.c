@@ -197,11 +197,20 @@ static uint32_t iocrypt_file_init(iocrypt_file_context* file, uint8_t* path, uin
 
 	rewind(file->in);
 
+	if(file->type == IOCRYPT_ENCRYPT)
+	{ 
+	   memcpy(file->path_name + path_len, IOCRYPT_EXT, strlen(IOCRYPT_EXT));
+	}
+	else
+	{
+	   uint8_t* p = &file->path_name[path_len-1];
+	   while(*--p != '.');
+	   memset(p, 0, strlen(IOCRYPT_EXT));
+	   file->in_len -= HEADER_SIZE;
+	}
+
 	file->file_blocks = file->in_len / FILE_BUF_SIZE;
 	file->final_block = file->in_len % FILE_BUF_SIZE;
-
-	// add check for decryption (remove .enc)
-	memcpy(file->path_name + path_len, IOCRYPT_EXT, strlen(IOCRYPT_EXT));
 
 	/* Create output file */
 
@@ -213,9 +222,9 @@ static uint32_t iocrypt_file_init(iocrypt_file_context* file, uint8_t* path, uin
 		goto cleanup;
 	}
 
-	/* pad the header */
+	/* pad the header upon encryption */
 
-	if (fwrite(NULL, 1, HEADER_SIZE, file->out) != HEADER_SIZE)
+	if (file->type == IOCRYPT_ENCRYPT && fwrite(file->file_buf, 1, HEADER_SIZE, file->out) != HEADER_SIZE)
 	{
 		ret = IOCRYPT_ERROR;
 		goto cleanup;
@@ -378,7 +387,7 @@ uint32_t iocrypt_crypt(iocrypt_context* ctx, uint32_t type, uint8_t* file_path, 
 	}
 	else
 	{
-	   if(!iocrypt_timesafe_compare(hmac, HASH_SIZE, ctx->iocrypt_header + SALT_SIZE, HASH_SIZE, HASH_SIZE))
+	   if(iocrypt_timesafe_compare(hmac, HASH_SIZE, ctx->iocrypt_header + SALT_SIZE, HASH_SIZE, HASH_SIZE) != 0)
 	   {
 		   ret = IOCRYPT_ERROR;
 		   goto cleanup;
