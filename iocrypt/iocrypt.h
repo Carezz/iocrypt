@@ -82,3 +82,4 @@ uint32_t iocrypt_init(iocrypt_context* ctx, uint8_t* passphrase, uint32_t passph
 uint32_t iocrypt_crypt_dir(iocrypt_context* ctx, uint32_t type, uint8_t* dir_path, uint32_t dir_path_len);
 uint32_t iocrypt_crypt(iocrypt_context* ctx, uint32_t type, uint8_t* file_path, uint32_t file_path_len);
 void iocrypt_free(iocrypt_context* ctx);
+
