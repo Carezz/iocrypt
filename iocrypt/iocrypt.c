@@ -186,10 +186,17 @@ static uint32_t iocrypt_file_init(iocrypt_file_context* file, uint8_t* path, uin
 	   memcpy(file->path + path_len, IOCRYPT_EXT, strlen(IOCRYPT_EXT));
 	}
 	else
-	{ // (works but insecure)
-	   uint8_t* p = &file->path[path_len-1];
-	   while(*--p != '.');
-	   memset(p, 0, strlen(IOCRYPT_EXT));
+	{ 
+	   uint32_t ext_len = strlen(IOCRYPT_EXT);
+	   uint8_t* p = &file->path[path_len-ext_len];
+
+	   if (!iocrypt_timesafe_compare(p, ext_len, IOCRYPT_EXT, ext_len, ext_len))
+	   {
+		   ret = IOCRYPT_ERROR;
+		   goto cleanup;
+	   }
+
+	   memset(p, 0, ext_len);
 	}
 
 	/* Create output file */
@@ -302,16 +309,6 @@ uint32_t iocrypt_init(iocrypt_context* ctx, uint8_t* passphrase, uint32_t passph
 	ctx->offset = 0;
 
 	return IOCRYPT_SUCCESS;
-}
-
-uint32_t iocrypt_crypt_dir(iocrypt_context* ctx, uint32_t type, uint8_t* dir_path, uint32_t dir_path_len)
-{
-   if(dir_path == NULL || !dir_path_len)
-      return IOCRYPT_ERROR;
-   
-
-
-   return IOCRYPT_SUCCESS;
 }
 
 uint32_t iocrypt_crypt(iocrypt_context* ctx, uint32_t type, uint8_t* file_path, uint32_t file_path_len)

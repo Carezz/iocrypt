@@ -6,7 +6,7 @@
 #define PATH "E:\\testfile.txt"
 #define PATH_DECRYPT "E:\\testfile.txt.enc"
 
-#define CIPHER_MODE 0 // 1 = encrypt , 0 = decrypt
+#define CIPHER_MODE 1 // 1 = encrypt , 0 = decrypt
 
 int main()
 {

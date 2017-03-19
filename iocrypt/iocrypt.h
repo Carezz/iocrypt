@@ -32,6 +32,10 @@
 #define IOCRYPT_SUCCESS 1
 #define IOCRYPT_ERROR 0
 
+/* Errors */
+#define IOCRYPT_ERR_INVALID_ARG -0x00001
+#define IOCRYPT_ERR_
+
 #define IOCRYPT_ENCRYPT 1
 #define IOCRYPT_DECRYPT 0
 
