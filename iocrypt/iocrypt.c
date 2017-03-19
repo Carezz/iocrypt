@@ -78,11 +78,11 @@ cleanup:
 static uint32_t iocrypt_derive_keys(iocrypt_context* ctx)
 {
 	uint32_t ret = IOCRYPT_SUCCESS;
-	uint8_t* input = ctx->keys.master_key, *output = ctx->iocrypt_header + SALT_SIZE + HASH_SIZE + SALT_SIZE;
+	uint8_t* input = ctx->keys.master_key, *output = ctx->file.iocrypt_header + SALT_SIZE + HASH_SIZE + SALT_SIZE;
 
 	/* if we're encrypting , generate the needed keys */
 
-	if (ctx->file.type == IOCRYPT_ENCRYPT && !iocrypt_gen_keys(&ctx->keys, ctx->iocrypt_header))
+	if (ctx->file.type == IOCRYPT_ENCRYPT && !iocrypt_gen_keys(&ctx->keys, ctx->file.iocrypt_header))
 	{
 		ret = IOCRYPT_ERROR;
 		goto cleanup;
@@ -90,14 +90,14 @@ static uint32_t iocrypt_derive_keys(iocrypt_context* ctx)
 
 	/* derive the hmac and header keys */
 
-	if (mbedtls_hkdf(ctx->hash.md_info, ctx->iocrypt_header, SALT_SIZE, ctx->passphrase, ctx->passphrase_len,
+	if (mbedtls_hkdf(ctx->hash.md_info, ctx->file.iocrypt_header, SALT_SIZE, ctx->passphrase, ctx->passphrase_len,
 		KDF_CUSTOM, sizeof(KDF_CUSTOM), ctx->keys.hmac_key, HMACKEY_SIZE) != 0)
 	{
 		ret = IOCRYPT_ERROR;
 		goto cleanup;
 	}
 	
-	if (mbedtls_hkdf(ctx->hash.md_info, ctx->iocrypt_header + SALT_SIZE + HASH_SIZE, SALT_SIZE, ctx->passphrase, ctx->passphrase_len,
+	if (mbedtls_hkdf(ctx->hash.md_info, ctx->file.iocrypt_header + SALT_SIZE + HASH_SIZE, SALT_SIZE, ctx->passphrase, ctx->passphrase_len,
 		KDF_CUSTOM, sizeof(KDF_CUSTOM), ctx->keys.header_key, HEADER_MASTER_SIZE) != 0)
 	{
 		ret = IOCRYPT_ERROR;
@@ -141,7 +141,7 @@ static uint32_t iocrypt_derive_keys(iocrypt_context* ctx)
 		goto cleanup;
 	}
 
-	if (mbedtls_md_hmac_update(&ctx->hash, ctx->iocrypt_header + SALT_SIZE + HASH_SIZE, HEADER_SIZE - (SALT_SIZE + HASH_SIZE)) != 0)
+	if (mbedtls_md_hmac_update(&ctx->hash, ctx->file.iocrypt_header + SALT_SIZE + HASH_SIZE, HEADER_SIZE - (SALT_SIZE + HASH_SIZE)) != 0)
 	{
 		ret = IOCRYPT_ERROR;
 		goto cleanup;
@@ -159,7 +159,7 @@ static uint32_t iocrypt_file_init(iocrypt_file_context* file, uint8_t* path, uin
 {
 	uint32_t ret = IOCRYPT_SUCCESS;
 
-	if (path_len >= MAX_PATH - 4)
+	if (path_len > MAX_PATH - (file->type*5))
 	{
 		ret = IOCRYPT_ERROR;
 		goto cleanup;
@@ -167,9 +167,9 @@ static uint32_t iocrypt_file_init(iocrypt_file_context* file, uint8_t* path, uin
 
 	/* Open input file */
 
-	memcpy(file->path_name, path, path_len);
+	memcpy(file->path, path, path_len);
 
-	file->in = fopen(file->path_name, INPUT_FILE_MODE);
+	file->in = fopen(file->path, INPUT_FILE_MODE);
 
 	if (file->in == NULL)
 	{
@@ -177,42 +177,20 @@ static uint32_t iocrypt_file_init(iocrypt_file_context* file, uint8_t* path, uin
 		goto cleanup;
 	}
 
-	/* Obtain file length */
-
-	if (fseek(file->in, 0, SEEK_END) != 0)
-	{
-		ret = IOCRYPT_ERROR;
-		goto cleanup;
-	}
-
-	file->in_len = ftell(file->in);
-
-	if (file->in_len == -1L)
-	{
-		ret = IOCRYPT_ERROR;
-		goto cleanup;
-	}
-
-	rewind(file->in);
-
 	if(file->type == IOCRYPT_ENCRYPT)
 	{ 
-	   memcpy(file->path_name + path_len, IOCRYPT_EXT, strlen(IOCRYPT_EXT));
+	   memcpy(file->path + path_len, IOCRYPT_EXT, strlen(IOCRYPT_EXT));
 	}
 	else
-	{
-	   uint8_t* p = &file->path_name[path_len-1];
+	{ // (works but insecure)
+	   uint8_t* p = &file->path[path_len-1];
 	   while(*--p != '.');
 	   memset(p, 0, strlen(IOCRYPT_EXT));
-	   file->in_len -= HEADER_SIZE;
 	}
-
-	file->file_blocks = file->in_len / FILE_BUF_SIZE;
-	file->final_block = file->in_len % FILE_BUF_SIZE;
 
 	/* Create output file */
 
-	file->out = fopen(file->path_name, OUTPUT_FILE_MODE);
+	file->out = fopen(file->path, OUTPUT_FILE_MODE);
 
 	if (file->out == NULL)
 	{
@@ -220,46 +198,23 @@ static uint32_t iocrypt_file_init(iocrypt_file_context* file, uint8_t* path, uin
 		goto cleanup;
 	}
 
-	/* pad the header upon encryption */
+	/* pad the header upon encryption or read the header upon decryption */
 
-	if (file->type == IOCRYPT_ENCRYPT && fwrite(file->file_buf, 1, HEADER_SIZE, file->out) != HEADER_SIZE)
+	if (file->type == IOCRYPT_ENCRYPT)
 	{
-		ret = IOCRYPT_ERROR;
-		goto cleanup;
+		if(fwrite(file->file_buf, 1, HEADER_SIZE, file->out) != HEADER_SIZE)
+		{
+			ret = IOCRYPT_ERROR;
+			goto cleanup;
+		}
 	}
-
-cleanup:
-	return ret;
-}
-
-static uint32_t iocrypt_file_crypt(iocrypt_context* ctx, uint32_t buf_len)
-{
-	uint32_t ret = IOCRYPT_SUCCESS;
-
-	if (fread(ctx->file.file_buf, 1, buf_len, ctx->file.in) != buf_len)
-	{ 
-		ret = IOCRYPT_ERROR;
-		goto cleanup;
-	}
-
-	if (mbedtls_aes_crypt_ctr(&ctx->cipher, buf_len, &ctx->offset, ctx->keys.master_iv, ctx->stream,
-		ctx->file.file_buf, ctx->file.file_buf) != 0)
+	else
 	{
-		ret = IOCRYPT_ERROR;
-		goto cleanup;
-	}
-
-	if (mbedtls_md_hmac_update(&ctx->hash, ctx->file.file_buf, buf_len) != 0)
-	{
-		ret = IOCRYPT_ERROR;
-		goto cleanup;
-	}
-
-
-	if (fwrite(ctx->file.file_buf, 1, buf_len, ctx->file.out) != buf_len)
-	{
-		ret = IOCRYPT_ERROR;
-		goto cleanup;
+		if (fread(file->iocrypt_header, 1, HEADER_SIZE, file->in) != HEADER_SIZE)
+		{
+			ret = IOCRYPT_ERROR;
+			goto cleanup;
+		}
 	}
 
 cleanup:
@@ -300,7 +255,7 @@ uint32_t iocrypt_init(iocrypt_context* ctx, uint8_t* passphrase, uint32_t passph
 
 	mbedtls_aes_init(&ctx->cipher);
 	memset(&ctx->keys, 0, sizeof(iocrypt_keys_context));
-	memset(ctx->iocrypt_header, 0, HEADER_SIZE);
+	memset(ctx->file.iocrypt_header, 0, HEADER_SIZE);
 
 	memset(ctx->stream, 0, sizeof(ctx->stream));
 	ctx->offset = 0;
@@ -324,7 +279,7 @@ uint32_t iocrypt_crypt(iocrypt_context* ctx, uint32_t type, uint8_t* file_path, 
 		return IOCRYPT_ERROR;
 
 	uint32_t ret = IOCRYPT_SUCCESS;
-	uint8_t* hmac_ptr = ctx->iocrypt_header + SALT_SIZE;
+	uint8_t* hmac_ptr = ctx->file.iocrypt_header + SALT_SIZE;
 	uint8_t hmac[HASH_SIZE] = {0};
 
 	ctx->file.type = type;
@@ -335,37 +290,36 @@ uint32_t iocrypt_crypt(iocrypt_context* ctx, uint32_t type, uint8_t* file_path, 
 		goto cleanup;
 	}
 
-	if (type == IOCRYPT_DECRYPT)
-	{
-	  if(fread(ctx->iocrypt_header, 1, HEADER_SIZE, ctx->file.in) != HEADER_SIZE)
-	  { 
-		ret = IOCRYPT_ERROR;
-		goto cleanup;
-	  }
-
-	  hmac_ptr = hmac;
-	}
-
 	if (!iocrypt_derive_keys(ctx))
 	{
 		ret = IOCRYPT_ERROR;
 		goto cleanup;
 	}
 
-	while (ctx->file.file_blocks--)
+	while ((ctx->file.len = fread(ctx->file.file_buf, 1, FILE_BUF_SIZE, ctx->file.in)) > 0)
 	{
-		if (!iocrypt_file_crypt(ctx, FILE_BUF_SIZE))
+		if (mbedtls_aes_crypt_ctr(&ctx->cipher, ctx->file.len, &ctx->offset, ctx->keys.master_iv, 
+		                           ctx->stream, ctx->file.file_buf, ctx->file.file_buf) != 0)
+		{
+			ret = IOCRYPT_ERROR;
+			goto cleanup;
+		}
+
+		if (mbedtls_md_hmac_update(&ctx->hash, ctx->file.file_buf, ctx->file.len) != 0)
+		{
+			ret = IOCRYPT_ERROR;
+			goto cleanup;
+		}
+
+		if(fwrite(ctx->file.file_buf, 1, ctx->file.len, ctx->file.out) != ctx->file.len)
 		{
 			ret = IOCRYPT_ERROR;
 			goto cleanup;
 		}
 	}
 
-	if (ctx->file.final_block && !iocrypt_file_crypt(ctx, ctx->file.final_block))
-	{
-		ret = IOCRYPT_ERROR;
-		goto cleanup;
-	}
+	if (type == IOCRYPT_DECRYPT)
+		hmac_ptr = hmac;
 
 	if (mbedtls_md_hmac_finish(&ctx->hash, hmac_ptr) != 0)
 	{
@@ -377,7 +331,7 @@ uint32_t iocrypt_crypt(iocrypt_context* ctx, uint32_t type, uint8_t* file_path, 
 	{ 
 	   rewind(ctx->file.out);
 
-	   if(fwrite(ctx->iocrypt_header, 1, HEADER_SIZE, ctx->file.out) != HEADER_SIZE)
+	   if(fwrite(ctx->file.iocrypt_header, 1, HEADER_SIZE, ctx->file.out) != HEADER_SIZE)
 	   {
 		   ret = IOCRYPT_ERROR;
 		   goto cleanup;
@@ -385,7 +339,7 @@ uint32_t iocrypt_crypt(iocrypt_context* ctx, uint32_t type, uint8_t* file_path, 
 	}
 	else
 	{
-	   if(iocrypt_timesafe_compare(hmac, HASH_SIZE, ctx->iocrypt_header + SALT_SIZE, HASH_SIZE, HASH_SIZE) != 0)
+	   if(iocrypt_timesafe_compare(hmac, HASH_SIZE, ctx->file.iocrypt_header + SALT_SIZE, HASH_SIZE, HASH_SIZE) != 0)
 	   {
 		   ret = IOCRYPT_ERROR;
 		   goto cleanup;
@@ -393,14 +347,12 @@ uint32_t iocrypt_crypt(iocrypt_context* ctx, uint32_t type, uint8_t* file_path, 
 	}
 
 cleanup:
-    if(!ret) remove(ctx->file.path_name); 
 	hmac_ptr = NULL;
 	ctx->offset = 0;
 	iocrypt_secure_erase(ctx->stream, sizeof(ctx->stream));
 	iocrypt_secure_erase(hmac, HASH_SIZE);
-    iocrypt_file_free(&ctx->file);
 	iocrypt_secure_erase(&ctx->keys, sizeof(iocrypt_keys_context));
-	iocrypt_secure_erase(&ctx->iocrypt_header, HEADER_SIZE);
+    iocrypt_file_free(&ctx->file);
 	mbedtls_md_free(&ctx->hash);
 	mbedtls_aes_free(&ctx->cipher);
 	return ret;
@@ -416,7 +368,7 @@ void iocrypt_free(iocrypt_context* ctx)
    mbedtls_md_free(&ctx->hash);
    mbedtls_aes_free(&ctx->cipher);
    iocrypt_secure_erase(&ctx->keys, sizeof(iocrypt_keys_context));
-   iocrypt_secure_erase(&ctx->iocrypt_header, HEADER_SIZE);
+   iocrypt_secure_erase(&ctx->file.iocrypt_header, HEADER_SIZE);
    
    iocrypt_secure_erase(ctx->stream, sizeof(ctx->stream));
    ctx->offset = 0;

@@ -25,7 +25,7 @@ int main()
 #endif
 
 	path_len = strlen(path);
-	r = iocrypt_crypt(&io, mode, path, strlen(PATH_DECRYPT));
+	r = iocrypt_crypt(&io, mode, path, path_len);
     getchar();
 	iocrypt_free(&io);
 	return 0;

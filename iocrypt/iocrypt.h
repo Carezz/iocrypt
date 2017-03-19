@@ -56,25 +56,22 @@ typedef struct
 typedef struct
 {
   FILE* in;
-  uint64_t in_len;
-  uint64_t file_blocks;
-  uint32_t final_block;
   FILE* out;
-
-  uint8_t path_name[MAX_PATH];
+  uint8_t path[MAX_PATH];
+  uint8_t iocrypt_header[HEADER_SIZE];
   uint8_t file_buf[FILE_BUF_SIZE];
+  size_t len;
   uint32_t type;
 }iocrypt_file_context;
 
 typedef struct
 {
-  iocrypt_file_context file;
   uint8_t* passphrase;
   uint32_t passphrase_len;
+  iocrypt_file_context file;
+  iocrypt_keys_context keys;
   mbedtls_md_context_t hash;
   mbedtls_aes_context cipher;
-  iocrypt_keys_context keys;
-  uint8_t iocrypt_header[HEADER_SIZE];
 
   /* AES-CTR specific */
   uint8_t stream[16];
