@@ -293,14 +293,11 @@ uint32_t iocrypt_init(iocrypt_context* ctx, uint8_t* passphrase, uint32_t passph
 	if(mbedtls_md_setup(&ctx->hash, md_info, 1) != 0)
 	    return IOCRYPT_ERROR;
 
-	memset(&ctx->file, 0, sizeof(iocrypt_file_context));
 	ctx->passphrase = passphrase;
 	ctx->passphrase_len = passphrase_len;
-
-	mbedtls_aes_init(&ctx->cipher);
+	memset(&ctx->file, 0, sizeof(iocrypt_file_context));
 	memset(&ctx->keys, 0, sizeof(iocrypt_keys_context));
-	memset(ctx->file.iocrypt_header, 0, HEADER_SIZE);
-
+	mbedtls_aes_init(&ctx->cipher);
 	memset(ctx->stream, 0, sizeof(ctx->stream));
 	ctx->offset = 0;
 
@@ -397,14 +394,12 @@ void iocrypt_free(iocrypt_context* ctx)
 {
    if(ctx == NULL) return;
 
-   iocrypt_secure_erase(&ctx->file, sizeof(iocrypt_file_context));
    ctx->passphrase = NULL;
    ctx->passphrase_len = 0;
+   iocrypt_secure_erase(&ctx->file, sizeof(iocrypt_file_context));
+   iocrypt_secure_erase(&ctx->keys, sizeof(iocrypt_keys_context));
    mbedtls_md_free(&ctx->hash);
    mbedtls_aes_free(&ctx->cipher);
-   iocrypt_secure_erase(&ctx->keys, sizeof(iocrypt_keys_context));
-   iocrypt_secure_erase(&ctx->file.iocrypt_header, HEADER_SIZE);
-   
    iocrypt_secure_erase(ctx->stream, sizeof(ctx->stream));
    ctx->offset = 0;
 }
