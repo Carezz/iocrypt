@@ -159,7 +159,7 @@ static uint32_t iocrypt_file_init(iocrypt_file_context* file, uint8_t* path, uin
 {
 	uint32_t ret = IOCRYPT_SUCCESS;
 
-	if (path_len > MAX_PATH - (file->type*5))
+	if (path_len >= MAX_PATH - (file->type*4))
 	{
 		ret = IOCRYPT_ERROR;
 		goto cleanup;
@@ -275,7 +275,7 @@ uint32_t iocrypt_crypt_dir(iocrypt_context* ctx, uint32_t type, uint8_t* dir_pat
 
 uint32_t iocrypt_crypt(iocrypt_context* ctx, uint32_t type, uint8_t* file_path, uint32_t file_path_len)
 {
-	if (ctx == NULL || file_path == NULL || !file_path_len)
+	if (ctx == NULL || type > IOCRYPT_ENCRYPT | file_path == NULL || !file_path_len)
 		return IOCRYPT_ERROR;
 
 	uint32_t ret = IOCRYPT_SUCCESS;
